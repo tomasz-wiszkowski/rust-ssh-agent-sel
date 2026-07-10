@@ -61,7 +61,7 @@ previously registered agent.
 |---|---|---|
 | `--daemon` | — | Start daemon in background if not running; exit immediately |
 | `--socket <path>` | `$SSH_AUTH_SOCK` | Socket path to register (client mode) |
-| `--log-level <level>` | `info` | trace / debug / info / warn / error |
+| `--log-level <level>` | `warn` | trace / debug / info / warn / error |
 
 `RUST_LOG` overrides `--log-level`.
 

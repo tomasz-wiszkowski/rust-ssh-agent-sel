@@ -12,7 +12,7 @@ pub struct Cli {
     pub socket: Option<PathBuf>,
 
     /// Log level: trace, debug, info, warn, error
-    #[arg(long, default_value = "info")]
+    #[arg(long, default_value = "warn")]
     pub log_level: String,
 
     /// Start the daemon in the background if it is not already running, then exit.
