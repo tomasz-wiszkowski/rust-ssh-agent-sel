@@ -64,6 +64,7 @@ async fn handle_connection(
 
     stack.lock().await.push(path.clone());
     writer.write_all(b"OK\n").await?;
+    tracing::info!(path = %path.display(), "client connected");
 
     // Hold the connection; an EOF signals the session has ended.
     let mut buf = [0u8; 1];
@@ -76,5 +77,6 @@ async fn handle_connection(
     }
 
     stack.lock().await.remove(&path);
+    tracing::info!(path = %path.display(), "client disconnected");
     Ok(())
 }
