@@ -10,8 +10,6 @@ pub async fn run(cli: &Cli) -> Result<()> {
 
     let exe = std::env::current_exe().context("resolving current executable")?;
 
-    tracing::info!(path = %socket_path.display(), "registering socket with daemon");
-
     // --log-level is a top-level Cli arg and must come before the subcommand name.
     tokio::process::Command::new(&exe)
         .arg("--log-level")

@@ -34,24 +34,22 @@ pub async fn accept_loop(
 }
 
 async fn handle_connection(mut downstream: UnixStream, stack: SharedStack) -> Result<()> {
-    // Walk the stack to find a live upstream socket.
     loop {
         let candidate = stack.lock().await.drain_until_live();
-        let Some(path) = candidate else {
+        let Some(entry) = candidate else {
             tracing::warn!("no live upstream agent; closing incoming connection");
             return Ok(());
         };
 
-        match UnixStream::connect(&path).await {
+        match UnixStream::connect(&entry.path).await {
             Ok(mut upstream) => {
-                tracing::info!(path = %path.display(), "forwarding to socket");
+                tracing::info!("forwarding to socket [{}]", entry.id);
                 tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await?;
-                tracing::debug!(path = %path.display(), "forwarding session ended");
                 return Ok(());
             }
             Err(e) => {
-                tracing::warn!(path = %path.display(), "socket unreachable ({e}); dropping from stack");
-                stack.lock().await.remove(&path);
+                tracing::warn!("socket [{}] unreachable ({e}); dropping", entry.id);
+                stack.lock().await.remove(&entry.path);
             }
         }
     }

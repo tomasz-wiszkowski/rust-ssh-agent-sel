@@ -42,7 +42,6 @@ async fn handle_connection(
     let mut reader = BufReader::new(reader);
     let mut line = String::new();
 
-    // Read the REGISTER command
     let n = reader.read_line(&mut line).await?;
     if n == 0 {
         return Ok(());
@@ -67,11 +66,11 @@ async fn handle_connection(
         return Ok(());
     };
 
-    stack.lock().await.push(path.clone());
+    let id = stack.lock().await.push(path.clone());
     writer.write_all(b"OK\n").await?;
-    tracing::info!(path = %path.display(), "client connected");
+    tracing::info!("socket [{id}] connected as \"{}\"", path.display());
 
-    // Hold the connection; an EOF signals the session has ended.
+    // Hold until EOF — connection lifetime == registration lifetime.
     let mut buf = [0u8; 1];
     loop {
         use tokio::io::AsyncReadExt;
@@ -81,7 +80,8 @@ async fn handle_connection(
         }
     }
 
-    stack.lock().await.remove(&path);
-    tracing::info!(path = %path.display(), "client disconnected");
+    if let Some(id) = stack.lock().await.remove(&path) {
+        tracing::info!("socket [{id}] disconnected");
+    }
     Ok(())
 }

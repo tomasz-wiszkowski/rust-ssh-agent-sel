@@ -44,8 +44,6 @@ pub async fn run(path: PathBuf) -> Result<()> {
         bail!("daemon rejected registration: {response}");
     }
 
-    tracing::info!(path = %path.display(), "registered; holding connection");
-
     // Install SIGTERM handler so we exit cleanly when the session ends.
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("SIGTERM handler")?;
