@@ -1,0 +1,20 @@
+[package]
+name = "ssh-agent-sel"
+version = "0.1.0"
+edition = "2024"
+description = "SSH agent forwarding selector daemon with LIFO socket stack"
+
+[[bin]]
+name = "ssh-agent-sel"
+path = "src/main.rs"
+
+[dependencies]
+tokio              = { version = "1", features = ["rt", "macros", "net", "io-util", "signal", "sync", "process", "time"] }
+clap               = { version = "4", features = ["derive"] }
+anyhow             = "1"
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender   = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
