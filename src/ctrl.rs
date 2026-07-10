@@ -3,7 +3,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::sync::watch;
 
-use crate::stack::SharedStack;
+use crate::{paths, stack::SharedStack};
 
 pub async fn accept_loop(
     listener: UnixListener,
@@ -58,6 +58,11 @@ async fn handle_connection(
         let path = std::path::PathBuf::from(rest);
         if !path.is_absolute() {
             writer.write_all(b"ERR path must be absolute\n").await?;
+            return Ok(());
+        }
+        if paths::agent_socket_path().map(|p| p == path).unwrap_or(false) {
+            tracing::warn!("rejected self-registration attempt (would create a forwarding loop)");
+            writer.write_all(b"ERR cannot register the daemon's own socket\n").await?;
             return Ok(());
         }
         path
