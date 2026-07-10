@@ -50,6 +50,11 @@ async fn handle_connection(
 
     let line = line.trim_end_matches('\n').trim_end_matches('\r');
 
+    if line == "PING" {
+        writer.write_all(b"PONG\n").await?;
+        return Ok(());
+    }
+
     let path = if let Some(rest) = line.strip_prefix("REGISTER ") {
         let path = std::path::PathBuf::from(rest);
         if !path.is_absolute() {

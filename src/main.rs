@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -21,20 +24,41 @@ async fn main() -> Result<()> {
     let _guard = init_logging(&cli.log_level)?;
 
     match &cli.cmd {
-        Some(SubCmd::HoldRegister { path }) => hold::run(path.clone()).await,
-        None => {
-            if ctrl_is_live().await {
-                client::run(&cli).await
-            } else {
-                daemon::run().await
-            }
+        Some(SubCmd::HoldRegister { path }) => return hold::run(path.clone()).await,
+        Some(SubCmd::RunDaemon) => return daemon::run().await,
+        None => {}
+    }
+
+    if cli.daemon {
+        if daemon_ping().await {
+            tracing::info!("daemon already running");
+            return Ok(());
         }
+        let exe = std::env::current_exe().context("resolving current executable")?;
+        tokio::process::Command::new(&exe)
+            .arg("--log-level")
+            .arg(&cli.log_level)
+            .arg("_run_daemon")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("spawning daemon process")?;
+        tracing::info!("daemon started in background");
+        return Ok(());
+    }
+
+    // Auto-detect: client mode if a daemon is reachable, foreground daemon otherwise.
+    if daemon_ping().await {
+        client::run(&cli).await
+    } else {
+        daemon::run().await
     }
 }
 
-/// Returns true if the ctrl socket exists and accepts a connection.
-/// Removes a stale (unconnectable) socket file if found.
-async fn ctrl_is_live() -> bool {
+/// Send PING to the ctrl socket and return true if we get PONG back.
+/// Cleans up stale socket files when the connect attempt fails.
+async fn daemon_ping() -> bool {
     let ctrl_path = match paths::ctrl_socket_path() {
         Ok(p) => p,
         Err(_) => return false,
@@ -44,14 +68,26 @@ async fn ctrl_is_live() -> bool {
         return false;
     }
 
-    match tokio::net::UnixStream::connect(&ctrl_path).await {
-        Ok(_) => true,
+    let stream = match tokio::net::UnixStream::connect(&ctrl_path).await {
+        Ok(s) => s,
         Err(_) => {
             tracing::debug!("stale ctrl socket found; removing");
             let _ = std::fs::remove_file(&ctrl_path);
-            false
+            return false;
         }
-    }
+    };
+
+    let result = tokio::time::timeout(Duration::from_secs(2), async {
+        let (reader, mut writer) = stream.into_split();
+        writer.write_all(b"PING\n").await?;
+        let mut reader = BufReader::new(reader);
+        let mut line = String::new();
+        reader.read_line(&mut line).await?;
+        Ok::<bool, std::io::Error>(line.trim() == "PONG")
+    })
+    .await;
+
+    matches!(result, Ok(Ok(true)))
 }
 
 fn init_logging(level: &str) -> Result<WorkerGuard> {

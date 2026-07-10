@@ -15,6 +15,11 @@ pub struct Cli {
     #[arg(long, default_value = "info")]
     pub log_level: String,
 
+    /// Start the daemon in the background if it is not already running, then exit.
+    /// If a daemon is already running, does nothing.
+    #[arg(long)]
+    pub daemon: bool,
+
     #[command(subcommand)]
     pub cmd: Option<SubCmd>,
 }
@@ -22,9 +27,10 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum SubCmd {
     /// Internal: hold a ctrl connection for the given socket path.
-    /// Not intended for direct use.
     #[command(name = "_hold_register", hide = true)]
-    HoldRegister {
-        path: PathBuf,
-    },
+    HoldRegister { path: PathBuf },
+
+    /// Internal: run the daemon loop (used by --daemon to start a background process).
+    #[command(name = "_run_daemon", hide = true)]
+    RunDaemon,
 }
