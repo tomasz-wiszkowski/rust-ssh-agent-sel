@@ -10,12 +10,14 @@ pub async fn run(cli: &Cli) -> Result<()> {
 
     let exe = std::env::current_exe().context("resolving current executable")?;
 
-    // Spawn a background holder process that keeps the ctrl connection alive.
+    tracing::info!(path = %socket_path.display(), "registering socket with daemon");
+
+    // --log-level is a top-level Cli arg and must come before the subcommand name.
     tokio::process::Command::new(&exe)
-        .arg("_hold_register")
-        .arg(&socket_path)
         .arg("--log-level")
         .arg(&cli.log_level)
+        .arg("_hold_register")
+        .arg(&socket_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
