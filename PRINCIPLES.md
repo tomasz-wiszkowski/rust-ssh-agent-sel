@@ -4,13 +4,13 @@
 
 The daemon forwards raw bytes between the SSH client and the upstream agent. It never reads, parses, modifies, or inspects SSH agent protocol messages. This ensures compatibility with any agent, including those using proprietary or future protocol extensions.
 
-## 2. LIFO Socket Stack
+## 2. LIFO Socket Stack, Deduplicated by Path
 
-Registered agent sockets are maintained in a last-in, first-out stack. Each entry is assigned a stable numeric ID on registration. The most recently registered socket receives all forwarded traffic. When that socket becomes unavailable the daemon falls back to the previous entry, continuing down the stack until a live socket is found or the stack is exhausted.
+Registered agent sockets are maintained in a last-in, first-out stack, deduplicated by path. Each entry is assigned a stable numeric ID on registration. Registering a path already present in the stack moves that entry to the top rather than adding a duplicate. The most recently registered socket receives all forwarded traffic. When that socket becomes unavailable the daemon falls back to the previous entry, continuing down the stack until a live socket is found or the stack is exhausted.
 
-## 3. Session-Lifetime via Connection Hold
+## 3. Registration Is Fire-and-Forget
 
-A client registers its `SSH_AUTH_SOCK` by establishing a persistent connection to the control socket. The daemon treats the connection lifetime as the registration lifetime: when the connection closes (because the session's shell process exited), the daemon automatically removes the corresponding stack entry. No explicit deregistration command is needed.
+A client registers its `SSH_AUTH_SOCK` with a single `REGISTER` request and disconnects immediately — no connection is held open for the registration's lifetime, and no process needs to stay alive to keep the entry valid. Liveness is judged entirely by whether the registered socket file still exists (see Principle 4), not by whether the registering process or shell is still running. This is what lets a persistent local agent socket (e.g. macOS's system agent) register once and remain a permanent fallback at the bottom of the stack indefinitely, while ephemeral forwarded sockets are pruned automatically once the SSH session that created them tears down and removes the file. No explicit deregistration command is needed.
 
 ## 4. Passive + Proactive Validation
 

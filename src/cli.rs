@@ -26,10 +26,6 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum SubCmd {
-    /// Internal: hold a ctrl connection for the given socket path.
-    #[command(name = "_hold_register", hide = true)]
-    HoldRegister { path: PathBuf },
-
     /// Internal: run the daemon loop (used by --daemon to start a background process).
     #[command(name = "_run_daemon", hide = true)]
     RunDaemon,

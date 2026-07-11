@@ -24,15 +24,20 @@ impl AgentStack {
         Arc::new(Mutex::new(Self::new()))
     }
 
-    /// Push a socket path. Returns the assigned numeric ID.
+    /// Push a socket path, returning the assigned numeric ID. If the path is
+    /// already present, its existing entry is dropped first so the fresh
+    /// registration moves it to the top instead of duplicating it.
     pub fn push(&mut self, path: PathBuf) -> u32 {
+        if let Some(pos) = self.entries.iter().position(|e| e.path == path) {
+            self.entries.remove(pos);
+        }
         let id = self.next_id;
         self.next_id += 1;
         self.entries.push(StackEntry { id, path });
         id
     }
 
-    /// Remove the most-recently-registered occurrence of `path`.
+    /// Remove the entry matching `path`, if any.
     /// Returns the ID of the removed entry, or `None` if not found.
     pub fn remove(&mut self, path: &Path) -> Option<u32> {
         let pos = self.entries.iter().rposition(|e| e.path == path)?;
@@ -72,17 +77,26 @@ mod tests {
     }
 
     #[test]
-    fn remove_last_occurrence() {
+    fn push_existing_path_moves_to_top() {
         let mut s = AgentStack::new();
-        let id_a1 = s.push("/a".into());
-        s.push("/b".into());
         s.push("/a".into());
-        // rposition finds the last /a — which is NOT id_a1
-        let removed = s.remove(Path::new("/a")).unwrap();
-        assert_ne!(removed, id_a1);
+        s.push("/b".into());
+        let id = s.push("/a".into());
         assert_eq!(s.entries.len(), 2);
+        assert_eq!(s.entries[0].path, PathBuf::from("/b"));
+        assert_eq!(s.entries[1].path, PathBuf::from("/a"));
+        assert_eq!(s.entries[1].id, id);
+    }
+
+    #[test]
+    fn remove_existing_path() {
+        let mut s = AgentStack::new();
+        s.push("/a".into());
+        let id_b = s.push("/b".into());
+        let removed = s.remove(Path::new("/b")).unwrap();
+        assert_eq!(removed, id_b);
+        assert_eq!(s.entries.len(), 1);
         assert_eq!(s.entries[0].path, PathBuf::from("/a"));
-        assert_eq!(s.entries[1].path, PathBuf::from("/b"));
     }
 
     #[test]

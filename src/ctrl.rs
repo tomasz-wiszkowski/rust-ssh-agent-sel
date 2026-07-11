@@ -73,20 +73,6 @@ async fn handle_connection(
 
     let id = stack.lock().await.push(path.clone());
     writer.write_all(b"OK\n").await?;
-    tracing::info!("socket [{id}] connected as \"{}\"", path.display());
-
-    // Hold until EOF — connection lifetime == registration lifetime.
-    let mut buf = [0u8; 1];
-    loop {
-        use tokio::io::AsyncReadExt;
-        match reader.read(&mut buf).await {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
-    }
-
-    if let Some(id) = stack.lock().await.remove(&path) {
-        tracing::info!("socket [{id}] disconnected");
-    }
+    tracing::info!("socket [{id}] registered as \"{}\"", path.display());
     Ok(())
 }

@@ -11,7 +11,6 @@ mod cli;
 mod client;
 mod ctrl;
 mod daemon;
-mod hold;
 mod monitor;
 mod paths;
 mod stack;
@@ -24,7 +23,6 @@ async fn main() -> Result<()> {
     let _guard = init_logging(&cli.log_level)?;
 
     match &cli.cmd {
-        Some(SubCmd::HoldRegister { path }) => return hold::run(path.clone()).await,
         Some(SubCmd::RunDaemon) => return daemon::run().await,
         None => {}
     }

@@ -1,26 +1,50 @@
 use anyhow::{bail, Context, Result};
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 
 use crate::cli::Cli;
 use crate::paths;
 
 pub async fn run(cli: &Cli) -> Result<()> {
     let socket_path = resolve_socket(cli)?;
+    let ctrl_path = paths::ctrl_socket_path()?;
 
-    let exe = std::env::current_exe().context("resolving current executable")?;
+    // Retry a few times — the daemon may not have bound the socket yet.
+    let mut stream = None;
+    for attempt in 1..=5 {
+        match UnixStream::connect(&ctrl_path).await {
+            Ok(s) => {
+                stream = Some(s);
+                break;
+            }
+            Err(e) => {
+                tracing::debug!("ctrl connect attempt {attempt}/5 failed: {e}");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
 
-    // --log-level is a top-level Cli arg and must come before the subcommand name.
-    tokio::process::Command::new(&exe)
-        .arg("--log-level")
-        .arg(&cli.log_level)
-        .arg("_hold_register")
-        .arg(&socket_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("spawning holder process")?;
+    let stream = stream.context("could not connect to daemon control socket")?;
+    let (reader, mut writer) = stream.into_split();
+    let mut reader = BufReader::new(reader);
+
+    writer
+        .write_all(format!("REGISTER {}\n", socket_path.display()).as_bytes())
+        .await
+        .context("sending REGISTER")?;
+
+    let mut response = String::new();
+    reader
+        .read_line(&mut response)
+        .await
+        .context("reading response")?;
+
+    let response = response.trim();
+    if response != "OK" {
+        bail!("daemon rejected registration: {response}");
+    }
 
     let agent_sock = paths::agent_socket_path()?;
     println!("export SSH_AUTH_SOCK={}", agent_sock.display());

@@ -29,14 +29,21 @@ attempt fails and removed before the new daemon binds.
 
 ## Socket stack
 
-Registered sockets are kept in a LIFO stack. Each entry gets a numeric ID on
-push, visible in logs as `[1]`, `[2]`, etc.
+Registered sockets are kept in a LIFO stack, deduplicated by path. Each entry
+gets a numeric ID on push, visible in logs as `[1]`, `[2]`, etc. Registering a
+path that's already in the stack moves the existing entry to the top instead
+of adding a duplicate — so registering the same local agent socket from any
+number of shells collapses to one entry.
 
 The top-of-stack socket receives all forwarded traffic. Dead entries are
 removed in two ways:
 
 - **Passively** — when a forwarding attempt fails to connect.
 - **Proactively** — a background task checks file existence every 10 seconds.
+
+This is the only cleanup mechanism entries rely on. A persistent local agent
+socket (e.g. macOS's system agent) never goes dead, so it naturally settles
+at the bottom of the stack as a permanent fallback once registered.
 
 ---
 
@@ -66,9 +73,10 @@ REGISTER /path\n  →  OK\n
                      ERR <reason>\n
 ```
 
-A `REGISTER` command holds its connection open for the lifetime of the
-registration. When the holding process exits the connection drops and the
-daemon removes the entry. No explicit deregistration command exists.
+`REGISTER` is fire-and-forget: the daemon updates the stack, replies `OK`,
+and closes the connection. There is no explicit deregistration command and
+no connection held open for the registration's lifetime — dead entries are
+pruned entirely by the passive/proactive checks described above.
 
 ---
 
@@ -87,11 +95,10 @@ src/
 ├── main.rs     — startup, mode detection, logging init
 ├── cli.rs      — clap argument definitions
 ├── paths.rs    — ~/.ssh/* path helpers
-├── stack.rs    — AgentStack (LIFO, numeric IDs)
+├── stack.rs    — AgentStack (LIFO, deduplicated by path, numeric IDs)
 ├── daemon.rs   — socket binding, task orchestration, shutdown
 ├── ctrl.rs     — control socket accept loop and REGISTER handler
 ├── agent.rs    — forwarding socket accept loop and byte proxy
 ├── monitor.rs  — background liveness monitor
-├── client.rs   — client mode: spawn holder, print export line
-└── hold.rs     — internal: hold ctrl connection for session lifetime
+└── client.rs   — client mode: register socket, print export line, exit
 ```
